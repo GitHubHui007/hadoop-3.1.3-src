@@ -69,31 +69,31 @@ import com.google.common.base.Charsets;
 @InterfaceStability.Unstable
 class JobSubmitter {
   protected static final Logger LOG =
-      LoggerFactory.getLogger(JobSubmitter.class);
+          LoggerFactory.getLogger(JobSubmitter.class);
   private static final String SHUFFLE_KEYGEN_ALGORITHM = "HmacSHA1";
   private static final int SHUFFLE_KEY_LENGTH = 64;
   private FileSystem jtFs;
   private ClientProtocol submitClient;
   private String submitHostName;
   private String submitHostAddress;
-  
-  JobSubmitter(FileSystem submitFs, ClientProtocol submitClient) 
-  throws IOException {
+
+  JobSubmitter(FileSystem submitFs, ClientProtocol submitClient)
+          throws IOException {
     this.submitClient = submitClient;
     this.jtFs = submitFs;
   }
-  
+
   /**
-   * configure the jobconf of the user with the command line options of 
+   * configure the jobconf of the user with the command line options of
    * -libjars, -files, -archives.
    * @param job
    * @throws IOException
    */
-  private void copyAndConfigureFiles(Job job, Path jobSubmitDir) 
-  throws IOException {
+  private void copyAndConfigureFiles(Job job, Path jobSubmitDir)
+          throws IOException {
     Configuration conf = job.getConfiguration();
     boolean useWildcards = conf.getBoolean(Job.USE_WILDCARD_FOR_LIBJARS,
-        Job.DEFAULT_USE_WILDCARD_FOR_LIBJARS);
+            Job.DEFAULT_USE_WILDCARD_FOR_LIBJARS);
     JobResourceUploader rUploader = new JobResourceUploader(jtFs, useWildcards);
 
     rUploader.uploadResources(job, jobSubmitDir);
@@ -108,7 +108,7 @@ class JobSubmitter {
 
   /**
    * Internal method for submitting jobs to the system.
-   * 
+   *
    * <p>The job submission process involves:
    * <ol>
    *   <li>
@@ -118,12 +118,12 @@ class JobSubmitter {
    *   Computing the {@link InputSplit}s for the job.
    *   </li>
    *   <li>
-   *   Setup the requisite accounting information for the 
+   *   Setup the requisite accounting information for the
    *   {@link DistributedCache} of the job, if necessary.
    *   </li>
    *   <li>
    *   Copying the job's jar and configuration to the map-reduce system
-   *   directory on the distributed file-system. 
+   *   directory on the distributed file-system.
    *   </li>
    *   <li>
    *   Submitting the job to the <code>JobTracker</code> and optionally
@@ -136,10 +136,10 @@ class JobSubmitter {
    * @throws InterruptedException
    * @throws IOException
    */
-  JobStatus submitJobInternal(Job job, Cluster cluster) 
-  throws ClassNotFoundException, InterruptedException, IOException {
+  JobStatus submitJobInternal(Job job, Cluster cluster)
+          throws ClassNotFoundException, InterruptedException, IOException {
 
-    //validate the jobs output specs 
+    //validate the jobs output specs
     checkSpecs(job);
 
     Configuration conf = job.getConfiguration();
@@ -160,16 +160,16 @@ class JobSubmitter {
     JobStatus status = null;
     try {
       conf.set(MRJobConfig.USER_NAME,
-          UserGroupInformation.getCurrentUser().getShortUserName());
-      conf.set("hadoop.http.filter.initializers", 
-          "org.apache.hadoop.yarn.server.webproxy.amfilter.AmFilterInitializer");
+              UserGroupInformation.getCurrentUser().getShortUserName());
+      conf.set("hadoop.http.filter.initializers",
+              "org.apache.hadoop.yarn.server.webproxy.amfilter.AmFilterInitializer");
       conf.set(MRJobConfig.MAPREDUCE_JOB_DIR, submitJobDir.toString());
-      LOG.debug("Configuring job " + jobId + " with " + submitJobDir 
-          + " as the submit dir");
+      LOG.debug("Configuring job " + jobId + " with " + submitJobDir
+              + " as the submit dir");
       // get delegation token for the dir
       TokenCache.obtainTokensForNamenodes(job.getCredentials(),
-          new Path[] { submitJobDir }, conf);
-      
+              new Path[] { submitJobDir }, conf);
+
       populateTokenCache(conf, job.getCredentials());
 
       // generate a secret to authenticate shuffle transfers
@@ -183,7 +183,7 @@ class JobSubmitter {
         }
         SecretKey shuffleKey = keyGen.generateKey();
         TokenCache.setShuffleSecretKey(shuffleKey.getEncoded(),
-            job.getCredentials());
+                job.getCredentials());
       }
       if (CryptoUtils.isEncryptedSpillEnabled(conf)) {
         conf.setInt(MRJobConfig.MR_AM_MAX_ATTEMPTS, 1);
@@ -191,10 +191,13 @@ class JobSubmitter {
                 "data spill is enabled");
       }
 
+      //TODO-PZH 创建存放文件切片信息、作业配置信息文件的工作目录
       copyAndConfigureFiles(job, submitJobDir);
 
       Path submitJobFile = JobSubmissionFiles.getJobConfPath(submitJobDir);
-      
+      //TODO-PZH 创建存放文件切片信息、作业配置信息文件的工作目录
+
+
       // Create the splits for the job
       LOG.debug("Creating splits at " + jtFs.makeQualified(submitJobDir));
       int maps = writeSplits(job, submitJobDir);
@@ -202,19 +205,19 @@ class JobSubmitter {
       LOG.info("number of splits:" + maps);
 
       int maxMaps = conf.getInt(MRJobConfig.JOB_MAX_MAP,
-          MRJobConfig.DEFAULT_JOB_MAX_MAP);
+              MRJobConfig.DEFAULT_JOB_MAX_MAP);
       if (maxMaps >= 0 && maxMaps < maps) {
         throw new IllegalArgumentException("The number of map tasks " + maps +
-            " exceeded limit " + maxMaps);
+                " exceeded limit " + maxMaps);
       }
 
       // write "queue admins of the queue to which job is being submitted"
       // to job file.
       String queue = conf.get(MRJobConfig.QUEUE_NAME,
-          JobConf.DEFAULT_QUEUE_NAME);
+              JobConf.DEFAULT_QUEUE_NAME);
       AccessControlList acl = submitClient.getQueueAdmins(queue);
       conf.set(toFullPropertyName(queue,
-          QueueACL.ADMINISTER_JOBS.getAclName()), acl.getAclString());
+              QueueACL.ADMINISTER_JOBS.getAclName()), acl.getAclString());
 
       // removing jobtoken referrals before copying the jobconf to HDFS
       // as the tasks don't need this setting, actually they may break
@@ -223,16 +226,16 @@ class JobSubmitter {
       TokenCache.cleanUpTokenReferral(conf);
 
       if (conf.getBoolean(
-          MRJobConfig.JOB_TOKEN_TRACKING_IDS_ENABLED,
-          MRJobConfig.DEFAULT_JOB_TOKEN_TRACKING_IDS_ENABLED)) {
+              MRJobConfig.JOB_TOKEN_TRACKING_IDS_ENABLED,
+              MRJobConfig.DEFAULT_JOB_TOKEN_TRACKING_IDS_ENABLED)) {
         // Add HDFS tracking ids
         ArrayList<String> trackingIds = new ArrayList<String>();
         for (Token<? extends TokenIdentifier> t :
-            job.getCredentials().getAllTokens()) {
+                job.getCredentials().getAllTokens()) {
           trackingIds.add(t.decodeIdentifier().getTrackingId());
         }
         conf.setStrings(MRJobConfig.JOB_TOKEN_TRACKING_IDS,
-            trackingIds.toArray(new String[trackingIds.size()]));
+                trackingIds.toArray(new String[trackingIds.size()]));
       }
 
       // Set reservation info if it exists
@@ -241,15 +244,17 @@ class JobSubmitter {
         conf.set(MRJobConfig.RESERVATION_ID, reservationId.toString());
       }
 
+      //TODO-PZH 将一个作业的所有配置信息写入到工作目录中
       // Write job file to submit dir
       writeConf(conf, submitJobFile);
-      
+
       //
       // Now, actually submit the job (using the submit name)
       //
       printTokens(jobId, job.getCredentials());
+      //TODO-PZH 开始正式提交作业到Local或者Yarn
       status = submitClient.submitJob(
-          jobId, submitJobDir.toString(), job.getCredentials());
+              jobId, submitJobDir.toString(), job.getCredentials());
       if (status != null) {
         return status;
       } else {
@@ -264,37 +269,37 @@ class JobSubmitter {
       }
     }
   }
-  
-  private void checkSpecs(Job job) throws ClassNotFoundException, 
-      InterruptedException, IOException {
+
+  private void checkSpecs(Job job) throws ClassNotFoundException,
+          InterruptedException, IOException {
     JobConf jConf = (JobConf)job.getConfiguration();
     // Check the output specification
-    if (jConf.getNumReduceTasks() == 0 ? 
-        jConf.getUseNewMapper() : jConf.getUseNewReducer()) {
+    if (jConf.getNumReduceTasks() == 0 ?
+            jConf.getUseNewMapper() : jConf.getUseNewReducer()) {
       org.apache.hadoop.mapreduce.OutputFormat<?, ?> output =
-        ReflectionUtils.newInstance(job.getOutputFormatClass(),
-          job.getConfiguration());
+              ReflectionUtils.newInstance(job.getOutputFormatClass(),
+                      job.getConfiguration());
       output.checkOutputSpecs(job);
     } else {
       jConf.getOutputFormat().checkOutputSpecs(jtFs, jConf);
     }
   }
-  
-  private void writeConf(Configuration conf, Path jobFile) 
-      throws IOException {
-    // Write job file to JobTracker's fs        
-    FSDataOutputStream out = 
-      FileSystem.create(jtFs, jobFile, 
-                        new FsPermission(JobSubmissionFiles.JOB_FILE_PERMISSION));
+
+  private void writeConf(Configuration conf, Path jobFile)
+          throws IOException {
+    // Write job file to JobTracker's fs
+    FSDataOutputStream out =
+            FileSystem.create(jtFs, jobFile,
+                    new FsPermission(JobSubmissionFiles.JOB_FILE_PERMISSION));
     try {
       conf.writeXml(out);
     } finally {
       out.close();
     }
   }
-  
+
   private void printTokens(JobID jobId,
-      Credentials credentials) throws IOException {
+                           Credentials credentials) throws IOException {
     LOG.info("Submitting tokens for job: " + jobId);
     LOG.info("Executing with tokens: {}", credentials.getAllTokens());
   }
@@ -302,25 +307,41 @@ class JobSubmitter {
   @SuppressWarnings("unchecked")
   private <T extends InputSplit>
   int writeNewSplits(JobContext job, Path jobSubmitDir) throws IOException,
-      InterruptedException, ClassNotFoundException {
+          InterruptedException, ClassNotFoundException {
     Configuration conf = job.getConfiguration();
+    // TODO-PZH 获取输入数据的格式类型
     InputFormat<?, ?> input =
-      ReflectionUtils.newInstance(job.getInputFormatClass(), conf);
-
+            ReflectionUtils.newInstance(job.getInputFormatClass(), conf);
+    // TODO-PZH 根据不同的InputFormat调用不同的分片算法
     List<InputSplit> splits = input.getSplits(job);
     T[] array = (T[]) splits.toArray(new InputSplit[splits.size()]);
 
     // sort the splits into order based on size, so that the biggest
     // go first
     Arrays.sort(array, new SplitComparator());
-    JobSplitWriter.createSplitFiles(jobSubmitDir, conf, 
-        jobSubmitDir.getFileSystem(conf), array);
+
+    // TODO-PZH 记录逻辑切片数量
+    job.getConfiguration().setLong("mapreduce.splits", splits.size());
+    // TODO-PZH 记录所有逻辑切片总长度
+    long totalLength = 0;
+    for (int i = 0; i < splits.size(); i++) {
+      long length=splits.get(i).getLength();
+      totalLength +=length ;
+      LOG.info("[PZH-DEBUG]:" + length+"b\t"+(length>>20)+"mb");
+    }
+    job.getConfiguration().setLong("mapreduce.splits.totalLength", totalLength);
+    // TODO-PZH 记录最小逻辑切片的长度
+    job.getConfiguration().setLong("mapreduce.minimalSplitLength", array[array.length - 1].getLength());
+
+    // TODO-PZH 将逻辑切片信息写入到工作目录
+    JobSplitWriter.createSplitFiles(jobSubmitDir, conf,
+            jobSubmitDir.getFileSystem(conf), array);
     return array.length;
   }
-  
+
   private int writeSplits(org.apache.hadoop.mapreduce.JobContext job,
-      Path jobSubmitDir) throws IOException,
-      InterruptedException, ClassNotFoundException {
+                          Path jobSubmitDir) throws IOException,
+          InterruptedException, ClassNotFoundException {
     JobConf jConf = (JobConf)job.getConfiguration();
     int maps;
     if (jConf.getUseNewMapper()) {
@@ -330,12 +351,12 @@ class JobSubmitter {
     }
     return maps;
   }
-  
+
   //method to write splits for old api mapper.
-  private int writeOldSplits(JobConf job, Path jobSubmitDir) 
-  throws IOException {
+  private int writeOldSplits(JobConf job, Path jobSubmitDir)
+          throws IOException {
     org.apache.hadoop.mapred.InputSplit[] splits =
-    job.getInputFormat().getSplits(job, job.getNumMapTasks());
+            job.getInputFormat().getSplits(job, job.getNumMapTasks());
     // sort the splits into order based on size, so that the biggest
     // go first
     Arrays.sort(splits, new Comparator<org.apache.hadoop.mapred.InputSplit>() {
@@ -356,11 +377,11 @@ class JobSubmitter {
         }
       }
     });
-    JobSplitWriter.createSplitFiles(jobSubmitDir, job, 
-        jobSubmitDir.getFileSystem(job), splits);
+    JobSplitWriter.createSplitFiles(jobSubmitDir, job,
+            jobSubmitDir.getFileSystem(job), splits);
     return splits.length;
   }
-  
+
   private static class SplitComparator implements Comparator<InputSplit> {
     @Override
     public int compare(InputSplit o1, InputSplit o2) {
@@ -381,18 +402,18 @@ class JobSubmitter {
       }
     }
   }
-  
+
   @SuppressWarnings("unchecked")
   private void readTokensFromFiles(Configuration conf, Credentials credentials)
-  throws IOException {
+          throws IOException {
     // add tokens and secrets coming from a token storage file
     String binaryTokenFilename =
-      conf.get(MRJobConfig.MAPREDUCE_JOB_CREDENTIALS_BINARY);
+            conf.get(MRJobConfig.MAPREDUCE_JOB_CREDENTIALS_BINARY);
     if (binaryTokenFilename != null) {
       Credentials binary = Credentials.readTokenStorageFile(
-          FileSystem.getLocal(conf).makeQualified(
-              new Path(binaryTokenFilename)),
-          conf);
+              FileSystem.getLocal(conf).makeQualified(
+                      new Path(binaryTokenFilename)),
+              conf);
       credentials.addAll(binary);
     }
     // add secret keys coming from a json file
@@ -404,11 +425,11 @@ class JobSubmitter {
       try {
         // read JSON
         Map<String, String> nm = JsonSerialization.mapReader().readValue(
-            new File(localFileName));
+                new File(localFileName));
 
         for(Map.Entry<String, String> ent: nm.entrySet()) {
           credentials.addSecretKey(new Text(ent.getKey()), ent.getValue()
-              .getBytes(Charsets.UTF_8));
+                  .getBytes(Charsets.UTF_8));
         }
       } catch (JsonMappingException | JsonParseException e) {
         LOG.warn("couldn't parse Token Cache JSON file with user secret keys");
@@ -417,13 +438,13 @@ class JobSubmitter {
   }
 
   //get secret keys and tokens and store them into TokenCache
-  private void populateTokenCache(Configuration conf, Credentials credentials) 
-  throws IOException{
+  private void populateTokenCache(Configuration conf, Credentials credentials)
+          throws IOException{
     readTokensFromFiles(conf, credentials);
     // add the delegation tokens from configuration
     String [] nameNodes = conf.getStrings(MRJobConfig.JOB_NAMENODES);
-    LOG.debug("adding the following namenodes' delegation tokens:" + 
-        Arrays.toString(nameNodes));
+    LOG.debug("adding the following namenodes' delegation tokens:" +
+            Arrays.toString(nameNodes));
     if(nameNodes != null) {
       Path [] ps = new Path[nameNodes.length];
       for(int i=0; i< nameNodes.length; i++) {
@@ -435,17 +456,17 @@ class JobSubmitter {
 
   @SuppressWarnings("deprecation")
   private static void addMRFrameworkToDistributedCache(Configuration conf)
-      throws IOException {
+          throws IOException {
     String framework =
-        conf.get(MRJobConfig.MAPREDUCE_APPLICATION_FRAMEWORK_PATH, "");
+            conf.get(MRJobConfig.MAPREDUCE_APPLICATION_FRAMEWORK_PATH, "");
     if (!framework.isEmpty()) {
       URI uri;
       try {
         uri = new URI(framework);
       } catch (URISyntaxException e) {
         throw new IllegalArgumentException("Unable to parse '" + framework
-            + "' as a URI, check the setting for "
-            + MRJobConfig.MAPREDUCE_APPLICATION_FRAMEWORK_PATH, e);
+                + "' as a URI, check the setting for "
+                + MRJobConfig.MAPREDUCE_APPLICATION_FRAMEWORK_PATH, e);
       }
 
       String linkedName = uri.getFragment();
@@ -455,13 +476,13 @@ class JobSubmitter {
       // in the distributed cache configuration
       FileSystem fs = FileSystem.get(uri, conf);
       Path frameworkPath = fs.makeQualified(
-          new Path(uri.getScheme(), uri.getAuthority(), uri.getPath()));
+              new Path(uri.getScheme(), uri.getAuthority(), uri.getPath()));
       FileContext fc = FileContext.getFileContext(frameworkPath.toUri(), conf);
       frameworkPath = fc.resolvePath(frameworkPath);
       uri = frameworkPath.toUri();
       try {
         uri = new URI(uri.getScheme(), uri.getAuthority(), uri.getPath(),
-            null, linkedName);
+                null, linkedName);
       } catch (URISyntaxException e) {
         throw new IllegalArgumentException(e);
       }
